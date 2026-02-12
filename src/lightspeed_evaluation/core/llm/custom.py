@@ -2,6 +2,7 @@
 
 import os
 import logging
+import threading
 from typing import Any, Optional, Union
 
 import litellm
@@ -15,6 +16,11 @@ logger = logging.getLogger(__name__)
 class TokenTracker:
     """Tracks token usage from LiteLLM calls via callbacks.
 
+    Thread-safe implementation using per-instance callbacks. Only counts tokens
+    when actively expecting a callback (after reset() is called), ensuring
+    compatibility with third-party libraries (Ragas, DeepEval) that may make
+    LLM calls from their own internal threads.
+
     Usage:
         tracker = TokenTracker()
         tracker.start()  # Register callback
@@ -23,11 +29,18 @@ class TokenTracker:
         input_tokens, output_tokens = tracker.get_counts()
     """
 
+    _callback_lock = (
+        threading.Lock()
+    )  # Class-level lock for callback list modifications
+
     def __init__(self) -> None:
         """Initialize token tracker."""
         self.input_tokens = 0
         self.output_tokens = 0
         self._callback_registered = False
+        self._lock = threading.Lock()  # Instance lock for token counter updates
+        self._pending_callbacks = 0  # Number of callbacks we're waiting for
+        self._callback_condition = threading.Condition(self._lock)
 
     def _token_callback(
         self,
@@ -36,37 +49,70 @@ class TokenTracker:
         _start_time: float,
         _end_time: float,
     ) -> None:
-        """Capture token usage from LiteLLM completion response."""
-        if hasattr(completion_response, "usage") and completion_response.usage:
-            usage = completion_response.usage
-            self.input_tokens += getattr(usage, "prompt_tokens", 0)
-            self.output_tokens += getattr(usage, "completion_tokens", 0)
+        """Capture token usage from LiteLLM completion response.
+
+        Only counts tokens if this tracker is actively expecting a callback
+        (indicated by _pending_callbacks > 0). This allows compatibility with
+        third-party libraries (Ragas, DeepEval) that may make LLM calls from
+        their own internal threads.
+        """
+        # Only count tokens if we're expecting a callback (after reset() was called)
+        with self._callback_condition:
+            if self._pending_callbacks <= 0:
+                return
+
+            if hasattr(completion_response, "usage") and completion_response.usage:
+                usage = completion_response.usage
+                self.input_tokens += getattr(usage, "prompt_tokens", 0)
+                self.output_tokens += getattr(usage, "completion_tokens", 0)
+
+            # Always decrement and notify, even if usage was missing
+            self._pending_callbacks = max(0, self._pending_callbacks - 1)
+            self._callback_condition.notify_all()
 
     def start(self) -> None:
         """Register the token tracking callback."""
         if self._callback_registered:
             return
-        if not hasattr(litellm, "success_callback") or litellm.success_callback is None:
-            litellm.success_callback = []
-        litellm.success_callback.append(self._token_callback)
+        with TokenTracker._callback_lock:
+            if (
+                not hasattr(litellm, "success_callback")
+                or litellm.success_callback is None
+            ):
+                litellm.success_callback = []
+            litellm.success_callback.append(self._token_callback)
         self._callback_registered = True
 
     def stop(self) -> None:
         """Unregister the token tracking callback."""
         if not self._callback_registered:
             return
-        if self._token_callback in litellm.success_callback:
-            litellm.success_callback.remove(self._token_callback)
+        with TokenTracker._callback_lock:
+            if self._token_callback in litellm.success_callback:
+                litellm.success_callback.remove(self._token_callback)
         self._callback_registered = False
 
     def get_counts(self) -> tuple[int, int]:
-        """Get accumulated token counts."""
-        return self.input_tokens, self.output_tokens
+        """Get accumulated token counts, waiting for pending callbacks if needed.
+
+        Returns:
+            Tuple of (input_tokens, output_tokens)
+        """
+        with self._callback_condition:
+            # Wait for pending callbacks with a timeout to handle race conditions
+            if self._pending_callbacks > 0:
+                self._callback_condition.wait(timeout=0.1)
+                # Clear stale pending state after timeout to avoid repeated waits
+                self._pending_callbacks = 0
+            return self.input_tokens, self.output_tokens
 
     def reset(self) -> None:
-        """Reset token counts to zero."""
-        self.input_tokens = 0
-        self.output_tokens = 0
+        """Reset token counts to zero and mark that we expect a callback."""
+        with self._callback_condition:
+            self.input_tokens = 0
+            self.output_tokens = 0
+            # Indicate we're expecting a callback after the next LLM call
+            self._pending_callbacks = 1
 
 
 class BaseCustomLLM:  # pylint: disable=too-few-public-methods

@@ -2,6 +2,8 @@
 
 """Unit tests for custom LLM classes."""
 
+import threading
+
 import pytest
 from pytest_mock import MockerFixture
 
@@ -13,8 +15,13 @@ class TestTokenTracker:
     """Tests for TokenTracker."""
 
     def test_token_callback_accumulates_tokens(self, mocker: MockerFixture) -> None:
-        """Test that token callback accumulates token counts."""
+        """Test that token callback accumulates token counts when expecting callback."""
+        # Mock litellm.success_callback to avoid side effects
+        mocker.patch("lightspeed_evaluation.core.llm.custom.litellm")
+
         tracker = TokenTracker()
+        tracker.start()
+        tracker.reset()  # Sets _pending_callbacks = 1, indicating we expect a callback
 
         # Mock completion response with usage
         mock_response = mocker.Mock()
@@ -22,11 +29,71 @@ class TestTokenTracker:
         mock_response.usage.prompt_tokens = 10
         mock_response.usage.completion_tokens = 20
 
+        # Call the instance callback directly
         tracker._token_callback({}, mock_response, 0.0, 0.0)
 
         input_tokens, output_tokens = tracker.get_counts()
         assert input_tokens == 10
         assert output_tokens == 20
+
+        tracker.stop()
+
+    def test_token_callback_ignores_when_not_expecting(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Test that token callback ignores tokens when not expecting callback."""
+        mocker.patch("lightspeed_evaluation.core.llm.custom.litellm")
+
+        tracker = TokenTracker()
+        tracker.start()
+        # Don't call reset() - _pending_callbacks remains 0
+
+        # Mock completion response with usage
+        mock_response = mocker.Mock()
+        mock_response.usage = mocker.Mock()
+        mock_response.usage.prompt_tokens = 100
+        mock_response.usage.completion_tokens = 200
+
+        # Call callback - should be ignored since we're not expecting any
+        tracker._token_callback({}, mock_response, 0.0, 0.0)
+
+        # Tokens should NOT be counted since _pending_callbacks was 0
+        input_tokens, output_tokens = tracker.get_counts()
+        assert input_tokens == 0
+        assert output_tokens == 0
+
+        tracker.stop()
+
+    def test_token_callback_works_from_other_threads(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Test that token callback works when called from other threads."""
+        mocker.patch("lightspeed_evaluation.core.llm.custom.litellm")
+
+        tracker = TokenTracker()
+        tracker.start()
+        tracker.reset()  # Expect a callback
+
+        # Mock completion response with usage
+        mock_response = mocker.Mock()
+        mock_response.usage = mocker.Mock()
+        mock_response.usage.prompt_tokens = 100
+        mock_response.usage.completion_tokens = 200
+
+        # Call callback from a different thread (simulating Ragas internal threads)
+        def call_from_other_thread() -> None:
+            tracker._token_callback({}, mock_response, 0.0, 0.0)
+
+        thread = threading.Thread(target=call_from_other_thread)
+        thread.start()
+        thread.join()
+
+        # Tokens SHOULD be counted - we removed thread ID check for compatibility
+        input_tokens, output_tokens = tracker.get_counts()
+        assert input_tokens == 100
+        assert output_tokens == 200
+
+        tracker.stop()
 
 
 class TestBaseCustomLLM:
