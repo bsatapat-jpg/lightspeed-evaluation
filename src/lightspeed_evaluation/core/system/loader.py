@@ -13,6 +13,7 @@ from lightspeed_evaluation.core.models import (
     LLMConfig,
     LoggingConfig,
     OutputConfig,
+    SuggestConfig,
     SystemConfig,
     VisualizationConfig,
 )
@@ -113,6 +114,7 @@ class ConfigLoader:  # pylint: disable=too-few-public-methods
         return SystemConfig(
             core=CoreConfig(**config_data.get("core", {})),
             llm=LLMConfig(**config_data.get("llm", {})),
+            suggest=SuggestConfig(**config_data.get("suggest", {})),
             embedding=EmbeddingConfig(**config_data.get("embedding") or {}),
             api=APIConfig(**config_data.get("api", {})),
             output=OutputConfig(**config_data.get("output", {})),

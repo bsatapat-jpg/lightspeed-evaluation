@@ -6,6 +6,21 @@ core:
   fail_on_invalid_data: true  # If False don't fail on invalid conversations (like missing context for some metrics)
   skip_on_failure: false      # If True, skip remaining turns when a turn evaluation fails (can be overridden per conversation)
 
+# Metric Suggestion Configuration
+# Use this to get AI-powered suggestions for which metrics to use based on your use case
+# Run with: python -m lightspeed_evaluation.runner.suggest --system-config config/system.yaml
+suggest:
+  enabled: false              # Set to true to enable metric suggestion
+  prompt: |
+    # Describe your use case here. Example:
+    # I am evaluating a RAG-based Q&A system that retrieves context from
+    # documentation and generates responses. I need to verify that:
+    # - Responses are accurate and match expected answers
+    # - Responses are grounded in the retrieved context
+    # - Retrieved context is relevant to the user's question
+    # I have expected responses for each query and access to the retrieved contexts.
+  output_file: "sample_system.yaml"  # Output file for generated configuration
+
 # LLM as a judge configuration
 llm:
   provider: "openai"                  # LLM Provider (openai, watsonx, gemini, hosted_vllm etc..)

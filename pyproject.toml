@@ -71,6 +71,7 @@ dev = [
 
 [project.scripts]
 lightspeed-eval = "lightspeed_evaluation.runner.evaluation:main"
+lightspeed-suggest = "lightspeed_evaluation.runner.suggest:main"
 generate_answers = "generate_answers.generate_answers:main"
 
 # Note: torch[cpu] variant configuration removed for uv compatibility

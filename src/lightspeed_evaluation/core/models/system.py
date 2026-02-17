@@ -319,6 +319,32 @@ class CoreConfig(BaseModel):
     )
 
 
+class SuggestConfig(BaseModel):
+    """Configuration for metric suggestion feature.
+
+    When enabled, uses LLM to analyze the user's use case and suggest
+    appropriate metrics from the available frameworks (ragas, deepeval, custom, etc.).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable metric suggestion feature",
+    )
+    prompt: Optional[str] = Field(
+        default=None,
+        description=(
+            "User's use case description. Describe your evaluation goals, "
+            "what you're testing, expected results, and how you want to interpret them."
+        ),
+    )
+    output_file: str = Field(
+        default="sample_system.yaml",
+        description="Output file path for generated configuration with suggested metrics",
+    )
+
+
 class LLMParametersConfig(BaseModel):
     """Dynamic parameters passed to LLM API calls.
 
@@ -612,6 +638,12 @@ class SystemConfig(BaseModel):
         default_factory=CoreConfig, description="Core eval configuration"
     )
     llm: LLMConfig = Field(default_factory=LLMConfig, description="LLM configuration")
+
+    # Metric suggestion configuration
+    suggest: SuggestConfig = Field(
+        default_factory=SuggestConfig,
+        description="Metric suggestion configuration for identifying appropriate metrics",
+    )
 
     # LLM Pool - shared pool of LLM configurations
     llm_pool: Optional[LLMPoolConfig] = Field(
