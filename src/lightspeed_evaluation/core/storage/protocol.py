@@ -1,15 +1,17 @@
 """Storage protocol interface for evaluation results.
 
-This module defines the abstract interface that all storage backends must implement.
+This module defines the abstract interface that all storage backends must implement,
+plus a small abstract base class with default no-op lifecycle hooks for backends
+that only need to satisfy the protocol (e.g. file slot in the pipeline).
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 from uuid import uuid4
 
-if TYPE_CHECKING:
-    from lightspeed_evaluation.core.models import EvaluationResult
+from lightspeed_evaluation.core.models.data import EvaluationResult
 
 
 @dataclass
@@ -49,7 +51,7 @@ class StorageProtocol(Protocol):
             StorageError: If initialization fails.
         """
 
-    def save_result(self, result: "EvaluationResult") -> None:
+    def save_result(self, result: EvaluationResult) -> None:
         """Save a single evaluation result incrementally.
 
         Args:
@@ -59,7 +61,7 @@ class StorageProtocol(Protocol):
             StorageError: If saving fails.
         """
 
-    def save_run(self, results: list["EvaluationResult"]) -> None:
+    def save_run(self, results: list[EvaluationResult]) -> None:
         """Save all evaluation results in batch.
 
         Args:
@@ -78,3 +80,31 @@ class StorageProtocol(Protocol):
 
     def close(self) -> None:
         """Close the backend and release resources."""
+
+
+class BaseStorageBackend(ABC):
+    """Abstract storage backend with default no-op lifecycle methods.
+
+    Subclasses must implement :attr:`backend_name`. Override any lifecycle
+    method that should perform work (for example :class:`SQLStorageBackend`).
+    """
+
+    @property
+    @abstractmethod
+    def backend_name(self) -> str:
+        """Return the name of this storage backend."""
+
+    def initialize(self, run_info: RunInfo) -> None:
+        """Prepare the backend for a new run; default does nothing."""
+
+    def save_result(self, result: EvaluationResult) -> None:
+        """Persist a single result; default does nothing."""
+
+    def save_run(self, results: list[EvaluationResult]) -> None:
+        """Persist a batch of results; default does nothing."""
+
+    def finalize(self) -> None:
+        """Complete the run; default does nothing."""
+
+    def close(self) -> None:
+        """Release resources; default does nothing."""

@@ -18,8 +18,16 @@ from lightspeed_evaluation.core.models.system import (
     LLMProviderConfig,
     SystemConfig,
 )
+from lightspeed_evaluation.core.storage import FileBackendConfig
 from lightspeed_evaluation.core.system.exceptions import DataValidationError
 from lightspeed_evaluation.runner.evaluation import _clear_caches, main, run_evaluation
+
+
+def _create_file_storage_mock(
+    output_dir: str = "/tmp/output", base_filename: str = "test"
+) -> list[FileBackendConfig]:
+    """Helper to create a storage config list with file backend."""
+    return [FileBackendConfig(output_dir=output_dir, base_filename=base_filename)]
 
 
 def _make_eval_args(**kwargs: Any) -> argparse.Namespace:
@@ -87,8 +95,7 @@ class TestRunEvaluation:
         mock_config.llm.provider = "openai"
         mock_config.llm.model = "gpt-4"
         mock_config.api.enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -154,8 +161,7 @@ class TestRunEvaluation:
         mock_config.llm.provider = "openai"
         mock_config.llm.model = "gpt-4"
         mock_config.api.enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -254,8 +260,7 @@ class TestRunEvaluation:
         mock_config.llm.provider = "openai"
         mock_config.llm.model = "gpt-4"
         mock_config.api.enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -309,8 +314,7 @@ class TestRunEvaluation:
         mock_config.llm.provider = "openai"
         mock_config.llm.model = "gpt-4"
         mock_config.api.enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -371,8 +375,7 @@ class TestRunEvaluation:
         mock_config.llm.provider = "openai"
         mock_config.llm.model = "gpt-4"
         mock_config.api.enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -668,8 +671,7 @@ class TestRunEvaluationCacheWarmup:
         mock_config.api.enabled = False
         mock_config.api.cache_enabled = False
         mock_config.embedding.cache_enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -745,8 +747,7 @@ class TestRunEvaluationCacheWarmup:
         mock_config.api.enabled = False
         mock_config.api.cache_enabled = False
         mock_config.embedding.cache_enabled = False
-        mock_config.output.output_dir = "/tmp/output"
-        mock_config.output.base_filename = "test"
+        mock_config.storage = _create_file_storage_mock()
         mock_loader.system_config = mock_config
         mock_loader.load_system_config.return_value = mock_config
 
@@ -991,10 +992,8 @@ class TestMain:
         }
 
         exit_code = main()
-
         assert exit_code == 0
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
-        assert args.cache_warmup is True
-        assert args.tags == ["basic"]
+        assert args.cache_warmup is True and args.tags == ["basic"]
         assert args.conv_ids == ["conv_1"]

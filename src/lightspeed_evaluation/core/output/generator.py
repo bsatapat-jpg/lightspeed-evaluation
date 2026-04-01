@@ -25,6 +25,7 @@ from lightspeed_evaluation.core.models.summary import (
     StreamingStats,
     TagStats,
 )
+from lightspeed_evaluation.core.storage import get_file_config
 from lightspeed_evaluation.core.output.visualization import GraphGenerator
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ class OutputHandler:
 
         # Get enabled outputs from system config
         enabled_outputs = (
-            self.system_config.output.enabled_outputs
+            get_file_config(self.system_config.storage).enabled_outputs
             if self.system_config is not None
             else SUPPORTED_OUTPUT_TYPES
         )
@@ -209,9 +210,9 @@ class OutputHandler:
         with open(csv_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
-            # Get CSV columns from system config output configuration
+            # Get CSV columns from system config storage configuration
             csv_columns = (
-                self.system_config.output.csv_columns
+                get_file_config(self.system_config.storage).csv_columns
                 if self.system_config is not None
                 else SUPPORTED_CSV_COLUMNS
             )
@@ -500,9 +501,9 @@ class OutputHandler:
         Returns:
             List of section names (e.g., ['llm', 'embedding', 'api']).
         """
-        if self.system_config is not None and hasattr(self.system_config, "output"):
-            if hasattr(self.system_config.output, "summary_config_sections"):
-                return self.system_config.output.summary_config_sections
+        if self.system_config is not None and hasattr(self.system_config, "storage"):
+            file_config = get_file_config(self.system_config.storage)
+            return file_config.summary_config_sections
         return DEFAULT_STORED_CONFIGS
 
     def _convert_config_to_dict(self, config: BaseModel | dict) -> dict[str, Any]:
