@@ -131,6 +131,24 @@ class TestSQLStorageBackendInitialize:
         assert backend.results_count == 0
         backend.close()
 
+    def test_initialize_fails_on_stale_table_schema(self, temp_db_url: str) -> None:
+        """Existing evaluation_results table must define every ORM column."""
+        engine = create_engine(temp_db_url)
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE TABLE evaluation_results ("
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    "run_id VARCHAR(36) NOT NULL"
+                    ")"
+                )
+            )
+        engine.dispose()
+
+        backend = SQLStorageBackend(temp_db_url, backend_name="sqlite")
+        with pytest.raises(StorageError, match="schema mismatch"):
+            backend.initialize(RunInfo())
+
 
 class TestSQLStorageBackendSaveResult:
     """Tests for save_result() method."""
